@@ -23,7 +23,12 @@ describe('plugin', () => {
         return hermione;
     };
 
-    const mkTestCollection = (testsTree) => ({eachTest: (bro, cb) => testsTree[bro].forEach(cb)});
+    const mkTestCollection = (testsTree) => {
+        return {
+            eachTest: (bro, cb) => testsTree[bro].forEach(cb),
+            getBrowsers: () => Object.keys(testsTree)
+        };
+    };
 
     beforeEach(() => {
         testParser = {setController: sandbox.stub()};
@@ -58,13 +63,28 @@ describe('plugin', () => {
         });
 
         describe('in master', () => {
+            it('should not disable/enable test if the test was not running in passive browser', () => {
+                const hermione = mkHermione_({browsers: ['bro', 'passive-bro']});
+                const test = stubTest_();
+
+                plugin(hermione, mkConfig_({browsers: 'passive-bro'}));
+
+                hermione.emit(hermione.events.BEFORE_FILE_READ, {browser: 'bro', testParser});
+                const testCollection = mkTestCollection({bro: [test]});
+                hermione.emit(hermione.events.AFTER_TESTS_READ, testCollection);
+
+                assert.notProperty(test, 'disabled');
+            });
+
             it('should disable tests only in passive browser', () => {
                 const hermione = mkHermione_({browsers: ['bro', 'passive-bro']});
                 const [test1, test2] = [stubTest_(), stubTest_()];
 
                 plugin(hermione, mkConfig_({browsers: 'passive-bro'}));
 
+                hermione.emit(hermione.events.BEFORE_FILE_READ, {browser: 'bro', testParser});
                 hermione.emit(hermione.events.BEFORE_FILE_READ, {browser: 'passive-bro', testParser});
+
                 const testCollection = mkTestCollection({bro: [test1], 'passive-bro': [test2]});
                 hermione.emit(hermione.events.AFTER_TESTS_READ, testCollection);
 
