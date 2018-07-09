@@ -18,6 +18,7 @@ Plugin has following configuration:
 
 * **enabled** (optional) `Boolean` – enable/disable the plugin; by default plugin is enabled
 * **browsers** (optional) `String|RegExp|Array<String|RegExp>` - browsers in which tests should not run by default
+* **commandName** (required) `String` - command name which will be added to hermione context and used in tests before test or suite declaration for enable test in passed browser
 
 Also there is ability to override plugin parameters by CLI options or environment variables
 (see [configparser](https://github.com/gemini-testing/configparser)).
@@ -34,13 +35,34 @@ module.exports = {
         plugins: {
             'hermione-passive-browsers': {
                 enabled: true,
-                browsers: /ie/
+                browsers: /ie/,
+                commandName: 'enable'
             }
         }
     },
     //...
 }
 ```
+
+Example:
+
+```js
+hermione.enable.in('ie6');
+describe('suite', () => {
+    it('test1', function() {...});
+
+    hermione.enable.in(['ie7', /ie[89]/]);
+    it('test2', function() {...});
+
+    hermione.enable.in(/ie1[01]/);
+    it('test3', function() {...});
+})
+```
+
+As a result:
+- test `test1` will be run in `ie6` browser
+- test `test2` will be run in `ie6`, `ie7`, `ie8` and `ie9` browsers
+- test `test3` will be run in `ie6`, `ie10` and `ie11` browsers
 
 ## Testing
 

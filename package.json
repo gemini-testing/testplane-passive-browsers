@@ -2,10 +2,11 @@
   "name": "hermione-passive-browsers",
   "version": "0.0.1",
   "description": "Plugin to run tests in passive browsers on request",
-  "main": "index.js",
+  "main": "lib/index.js",
   "scripts": {
-    "test": "mocha",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "npm run test-unit && npm run lint",
+    "test-unit": "mocha"
   },
   "repository": {
     "type": "git",
