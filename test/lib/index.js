@@ -63,19 +63,6 @@ describe('plugin', () => {
         });
 
         describe('in master', () => {
-            it('should not disable/enable test if the test was not running in passive browser', () => {
-                const hermione = mkHermione_({browsers: ['bro', 'passive-bro']});
-                const test = stubTest_();
-
-                plugin(hermione, mkConfig_({browsers: 'passive-bro'}));
-
-                hermione.emit(hermione.events.BEFORE_FILE_READ, {browser: 'bro', testParser});
-                const testCollection = mkTestCollection({bro: [test]});
-                hermione.emit(hermione.events.AFTER_TESTS_READ, testCollection);
-
-                assert.notProperty(test, 'disabled');
-            });
-
             it('should disable tests only in passive browser', () => {
                 const hermione = mkHermione_({browsers: ['bro', 'passive-bro']});
                 const [test1, test2] = [stubTest_(), stubTest_()];
@@ -92,7 +79,20 @@ describe('plugin', () => {
                 assert.include(test2, {disabled: true});
             });
 
-            describe('should enable tests', () => {
+            describe('should not disable test', () => {
+                it('if it was not running in passive browser', () => {
+                    const hermione = mkHermione_({browsers: ['bro', 'passive-bro']});
+                    const test = stubTest_();
+
+                    plugin(hermione, mkConfig_({browsers: 'passive-bro'}));
+
+                    hermione.emit(hermione.events.BEFORE_FILE_READ, {browser: 'bro', testParser});
+                    const testCollection = mkTestCollection({bro: [test]});
+                    hermione.emit(hermione.events.AFTER_TESTS_READ, testCollection);
+
+                    assert.notProperty(test, 'disabled');
+                });
+
                 it('using string matcher', () => {
                     const hermione = mkHermione_({browsers: ['passive-bro']});
                     const test = stubTest_();
@@ -103,7 +103,7 @@ describe('plugin', () => {
                     testParser.setController.firstCall.args[1].in.call(test, 'passive-bro');
                     hermione.emit(hermione.events.AFTER_TESTS_READ, mkTestCollection({'passive-bro': [test]}));
 
-                    assert.include(test, {disabled: false});
+                    assert.notProperty(test, 'disabled');
                 });
 
                 it('using regexp matcher', () => {
@@ -121,8 +121,8 @@ describe('plugin', () => {
                     const testCollection = mkTestCollection({'passive-bro1': [test1], 'passive-bro2': [test2]});
                     hermione.emit(hermione.events.AFTER_TESTS_READ, testCollection);
 
-                    assert.include(test1, {disabled: false});
-                    assert.include(test2, {disabled: false});
+                    assert.notProperty(test1, 'disabled');
+                    assert.notProperty(test2, 'disabled');
                 });
 
                 it('of suite', () => {
@@ -138,8 +138,8 @@ describe('plugin', () => {
                     const testCollection = mkTestCollection({'passive-bro': [test1, test2]});
                     hermione.emit(hermione.events.AFTER_TESTS_READ, testCollection);
 
-                    assert.include(test1, {disabled: false});
-                    assert.include(test2, {disabled: false});
+                    assert.notProperty(test1, 'disabled');
+                    assert.notProperty(test2, 'disabled');
                 });
             });
 
