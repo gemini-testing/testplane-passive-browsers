@@ -7,7 +7,6 @@ const {mkConfig_, stubTest_, stubSuite_} = require('./utils');
 
 describe('plugin', () => {
     const sandbox = sinon.createSandbox();
-    let testParser;
 
     const mkHermione_ = (opts) => {
         opts = _.defaults(opts, {proc: 'master', browsers: []});
@@ -25,14 +24,10 @@ describe('plugin', () => {
 
     const mkTestCollection = (testsTree) => {
         return {
-            eachTest: (bro, cb) => testsTree[bro].forEach(cb),
-            getBrowsers: () => Object.keys(testsTree)
+            eachTest: (bro, cb) => testsTree.filter(({browserId}) => browserId === bro).forEach(cb),
+            getBrowsers: () => _(testsTree).map('browserId').uniq().value()
         };
     };
-
-    beforeEach(() => {
-        testParser = {setController: sandbox.stub()};
-    });
 
     afterEach(() => sandbox.restore());
 
@@ -40,10 +35,10 @@ describe('plugin', () => {
         ['master', 'worker'].forEach((proc) => {
             it(`in ${proc}`, () => {
                 const hermione = mkHermione_({proc});
-
                 plugin(hermione, mkConfig_({commandName: 'foo'}));
 
-                hermione.emit(hermione.events.BEFORE_FILE_READ, {browser: 'some-bro', testParser});
+                const testParser = {setController: sandbox.stub()};
+                hermione.emit(hermione.events.BEFORE_FILE_READ, {testParser});
 
                 assert.calledOnceWith(testParser.setController, 'foo', {in: sinon.match.func});
             });
@@ -63,17 +58,22 @@ describe('plugin', () => {
         });
 
         describe('in master', () => {
+            const installController_ = (hermione) => {
+                const testParser = {setController: sandbox.stub()};
+                hermione.emit(hermione.events.BEFORE_FILE_READ, {testParser});
+
+                return testParser.setController.firstCall.args[1];
+            };
+
             it('should disable tests only in passive browser', () => {
                 const hermione = mkHermione_({browsers: ['bro', 'passive-bro']});
-                const [test1, test2] = [stubTest_(), stubTest_()];
+                const test1 = stubTest_({browserId: 'bro'});
+                const test2 = stubTest_({browserId: 'passive-bro'});
 
                 plugin(hermione, mkConfig_({browsers: 'passive-bro'}));
+                installController_(hermione);
 
-                hermione.emit(hermione.events.BEFORE_FILE_READ, {browser: 'bro', testParser});
-                hermione.emit(hermione.events.BEFORE_FILE_READ, {browser: 'passive-bro', testParser});
-
-                const testCollection = mkTestCollection({bro: [test1], 'passive-bro': [test2]});
-                hermione.emit(hermione.events.AFTER_TESTS_READ, testCollection);
+                hermione.emit(hermione.events.AFTER_TESTS_READ, mkTestCollection([test1, test2]));
 
                 assert.notProperty(test1, 'disabled');
                 assert.include(test2, {disabled: true});
@@ -82,44 +82,40 @@ describe('plugin', () => {
             describe('should not disable test', () => {
                 it('if it was not running in passive browser', () => {
                     const hermione = mkHermione_({browsers: ['bro', 'passive-bro']});
-                    const test = stubTest_();
+                    const test = stubTest_({browserId: 'bro'});
 
                     plugin(hermione, mkConfig_({browsers: 'passive-bro'}));
+                    installController_(hermione);
 
-                    hermione.emit(hermione.events.BEFORE_FILE_READ, {browser: 'bro', testParser});
-                    const testCollection = mkTestCollection({bro: [test]});
-                    hermione.emit(hermione.events.AFTER_TESTS_READ, testCollection);
+                    hermione.emit(hermione.events.AFTER_TESTS_READ, mkTestCollection([test]));
 
                     assert.notProperty(test, 'disabled');
                 });
 
                 it('using string matcher', () => {
                     const hermione = mkHermione_({browsers: ['passive-bro']});
-                    const test = stubTest_();
+                    const test = stubTest_({browserId: 'bassive-bro'});
 
                     plugin(hermione, mkConfig_({browsers: 'passive-bro'}));
-
-                    hermione.emit(hermione.events.BEFORE_FILE_READ, {browser: 'passive-bro', testParser});
-                    testParser.setController.firstCall.args[1].in.call(test, 'passive-bro');
-                    hermione.emit(hermione.events.AFTER_TESTS_READ, mkTestCollection({'passive-bro': [test]}));
+                    const controller = installController_(hermione);
+                    controller.in.call(test, 'passive-bro');
+                    hermione.emit(hermione.events.AFTER_TESTS_READ, mkTestCollection([test]));
 
                     assert.notProperty(test, 'disabled');
                 });
 
                 it('using regexp matcher', () => {
                     const hermione = mkHermione_({browsers: ['passive-bro1', 'passive-bro2']});
-                    const [test1, test2] = [stubTest_(), stubTest_()];
+                    const test1 = stubTest_({browserId: 'passive-bro1'});
+                    const test2 = stubTest_({browserId: 'passive-bro2'});
 
                     plugin(hermione, mkConfig_({browsers: ['passive-bro1', 'passive-bro2']}));
 
-                    hermione.emit(hermione.events.BEFORE_FILE_READ, {browser: 'passive-bro1', testParser});
-                    testParser.setController.firstCall.args[1].in.call(test1, 'passive-bro1');
+                    const controller = installController_(hermione);
+                    controller.in.call(test1, 'passive-bro1');
+                    controller.in.call(test2, 'passive-bro2');
 
-                    hermione.emit(hermione.events.BEFORE_FILE_READ, {browser: 'passive-bro2', testParser});
-                    testParser.setController.secondCall.args[1].in.call(test2, 'passive-bro2');
-
-                    const testCollection = mkTestCollection({'passive-bro1': [test1], 'passive-bro2': [test2]});
-                    hermione.emit(hermione.events.AFTER_TESTS_READ, testCollection);
+                    hermione.emit(hermione.events.AFTER_TESTS_READ, mkTestCollection([test1, test2]));
 
                     assert.notProperty(test1, 'disabled');
                     assert.notProperty(test2, 'disabled');
@@ -127,16 +123,15 @@ describe('plugin', () => {
 
                 it('of suite', () => {
                     const hermione = mkHermione_({browsers: ['passive-bro']});
-                    const suite = stubSuite_();
+                    const suite = stubSuite_({browserId: 'passive-bro'});
                     const [test1, test2] = [stubTest_({parent: suite}), stubTest_({parent: suite})];
 
                     plugin(hermione, mkConfig_({browsers: 'passive-bro'}));
 
-                    hermione.emit(hermione.events.BEFORE_FILE_READ, {browser: 'passive-bro', testParser});
-                    testParser.setController.firstCall.args[1].in.call(suite, 'passive-bro');
+                    const controller = installController_(hermione);
+                    controller.in.call(suite, 'passive-bro');
 
-                    const testCollection = mkTestCollection({'passive-bro': [test1, test2]});
-                    hermione.emit(hermione.events.AFTER_TESTS_READ, testCollection);
+                    hermione.emit(hermione.events.AFTER_TESTS_READ, mkTestCollection([test1, test2]));
 
                     assert.notProperty(test1, 'disabled');
                     assert.notProperty(test2, 'disabled');
@@ -152,9 +147,8 @@ describe('plugin', () => {
                 });
 
                 plugin(hermione, mkConfig_({browsers: 'passive-bro'}));
-
-                hermione.emit(hermione.events.BEFORE_FILE_READ, {browser: 'passive-bro', testParser});
-                hermione.emit(hermione.events.AFTER_TESTS_READ, mkTestCollection({'passive-bro': [stubTest_()]}));
+                installController_(hermione);
+                hermione.emit(hermione.events.AFTER_TESTS_READ, mkTestCollection([stubTest_({browserId: 'passive-bro'})]));
 
                 assert.calledOnceWith(spy, sinon.match({disabled: true}));
             });
