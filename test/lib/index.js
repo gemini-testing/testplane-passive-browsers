@@ -58,9 +58,9 @@ describe('plugin', () => {
         });
 
         describe('in master', () => {
-            const installController_ = (hermione) => {
+            const installController_ = (hermione, browser) => {
                 const testParser = {setController: sandbox.stub()};
-                hermione.emit(hermione.events.BEFORE_FILE_READ, {testParser});
+                hermione.emit(hermione.events.BEFORE_FILE_READ, {testParser, browser});
 
                 return testParser.setController.firstCall.args[1];
             };
@@ -77,6 +77,23 @@ describe('plugin', () => {
 
                 assert.notProperty(test1, 'disabled');
                 assert.include(test2, {disabled: true});
+            });
+
+            it('should use browser from event data if it does not set for suite', () => {
+                const hermione = mkHermione_({browsers: ['passive-bro']});
+                const suite = stubSuite_();
+                const test1 = stubTest_({parent: suite, browserId: 'passive-bro'});
+                const test2 = stubTest_({parent: suite, browserId: 'passive-bro'});
+
+                plugin(hermione, mkConfig_({browsers: 'passive-bro'}));
+
+                const controller = installController_(hermione, 'passive-bro');
+                controller.in.call(suite, 'passive-bro');
+
+                hermione.emit(hermione.events.AFTER_TESTS_READ, mkTestCollection([test1, test2]));
+
+                assert.notProperty(test1, 'disabled');
+                assert.notProperty(test2, 'disabled');
             });
 
             describe('should not disable test', () => {
